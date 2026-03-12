@@ -73,8 +73,7 @@
           "model": { "type": "string" },
           "apiKey": { "type": "string" },
           "baseUrl": { "type": "string" }
-        },
-        "required": ["provider", "model", "apiKey"]
+        }
       },
       "semanticIndex": {
         "type": "object",
@@ -86,13 +85,12 @@
           "baseUrl": { "type": "string" },
           "dimensions": { "type": "integer", "minimum": 1 }
         },
-        "required": ["apiKey"]
+        "default": {}
       },
       "logLevel": {
         "type": "string",
         "enum": ["debug", "info", "warn", "error"]
       }
-    },
-    "required": ["semanticIndex"]
+    }
   }
 }

@@ -111,6 +111,8 @@ openclaw plugins install ./context
 
 OpenClaw copies path installs into `~/.openclaw/extensions/` unless `--link` is used. During copy-based installs, OpenClaw also installs the package runtime dependencies declared in `context/package.json`.
 
+The plugin manifest intentionally allows installation before `semanticIndex` is configured. This avoids install-time validation failures when OpenClaw enables the plugin entry before writing user config.
+
 ## Enable the Context Slot
 
 In most cases, `openclaw plugins install` records the plugin, enables it, and applies a compatible slot automatically.
@@ -157,6 +159,8 @@ Add a `lancedb-claw` entry under `plugins.entries` in your OpenClaw config:
 }
 ```
 
+`semanticIndex` is recommended for production use, but it is not required for the initial install step. If it is missing, the plugin still loads and degrades to text-only recall until embedding credentials are configured.
+
 If digest summarization should use an explicit model override, add `digestModel` in the same config block.
 
 ## Typical Local Workflow
@@ -174,7 +178,7 @@ openclaw plugins install --link .
 After installation:
 
 1. Confirm `plugins.slots.contextEngine` resolves to `lancedb-claw`
-2. Confirm `plugins.entries.lancedb-claw.config.semanticIndex` is present
+2. Add `plugins.entries.lancedb-claw.config.semanticIndex` if you want digest embeddings and vector recall
 3. Restart OpenClaw
 4. Start a session and verify `bootstrap`, `assemble`, and `afterTurn` run without plugin load errors
 

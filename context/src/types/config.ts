@@ -27,7 +27,7 @@ export type LanceDbContextConfig = {
   startupRecallLimit?: number;
   replyRecallLimit?: number;
   digestModel?: DigestModelConfig;
-  semanticIndex: SemanticIndexConfig;
+  semanticIndex?: SemanticIndexConfig;
   logLevel?: LogLevelName;
 };
 
@@ -139,6 +139,8 @@ function parseDigestModelOverride(value: unknown): DigestModelConfig | undefined
   if (!isConfigRecord(value)) {
     throw new Error("digestModel must be an object");
   }
+  // TODO: Tighten digestModel validation again after OpenClaw can scaffold
+  // plugin config during install without failing on temporarily empty objects.
   const providerKey =
     typeof value.provider === "string" ? resolveEnvVars(value.provider).trim() : "";
   const modelId = typeof value.model === "string" ? resolveEnvVars(value.model).trim() : "";
@@ -147,8 +149,11 @@ function parseDigestModelOverride(value: unknown): DigestModelConfig | undefined
     typeof value.baseUrl === "string" && value.baseUrl.trim()
       ? resolveEnvVars(value.baseUrl).trim()
       : undefined;
+  if (!providerKey && !modelId && !apiSecret && !endpointBaseUrl) {
+    return undefined;
+  }
   if (!providerKey || !modelId || !apiSecret) {
-    throw new Error("digestModel.provider, digestModel.model, and digestModel.apiKey are required");
+    return undefined;
   }
   return {
     provider: providerKey,
@@ -159,8 +164,13 @@ function parseDigestModelOverride(value: unknown): DigestModelConfig | undefined
 }
 
 function resolveSemanticIndex(value: unknown): SemanticIndexConfig {
+  // TODO: Tighten semanticIndex validation again after OpenClaw supports
+  // install-time config scaffolding for required plugin fields.
+  if (value === undefined) {
+    return { ...DEFAULTS.semanticIndex };
+  }
   if (!isConfigRecord(value)) {
-    throw new Error("semanticIndex is required");
+    throw new Error("semanticIndex must be an object");
   }
   const provider = typeof value.provider === "string" ? value.provider.trim() : "openai";
   if (provider !== "openai") {
@@ -179,9 +189,6 @@ function resolveSemanticIndex(value: unknown): SemanticIndexConfig {
     typeof value.dimensions === "number" && Number.isFinite(value.dimensions)
       ? Math.max(1, Math.floor(value.dimensions))
       : undefined;
-  if (!apiKey) {
-    throw new Error("semanticIndex.apiKey is required");
-  }
   return { provider: "openai", model, apiKey, baseUrl, dimensions };
 }
 
