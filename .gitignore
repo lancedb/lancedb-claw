@@ -33,3 +33,4 @@ context/yarn-debug.log*
 context/yarn-error.log*
 context/.DS_Store
 .idea
+.pnpm-store
