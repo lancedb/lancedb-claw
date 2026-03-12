@@ -1,0 +1,96 @@
+{
+  "id": "lancedb-claw",
+  "kind": "context-engine",
+  "uiHints": {
+    "storePath": {
+      "label": "Store Path",
+      "placeholder": "~/.openclaw/context/lancedb-claw",
+      "advanced": true,
+      "help": "Directory used by LanceDB to persist context tables."
+    },
+    "tailKeepCount": {
+      "label": "Tail Keep Count",
+      "placeholder": "8",
+      "help": "Number of recent turns always kept at the prompt tail."
+    },
+    "shrinkStartRatio": {
+      "label": "Shrink Start Ratio",
+      "placeholder": "0.72",
+      "help": "Fraction of the token budget that triggers digest compaction."
+    },
+    "startupRecallLimit": {
+      "label": "Startup Recall Limit",
+      "placeholder": "3",
+      "help": "Maximum number of digest anchors injected during bootstrap."
+    },
+    "replyRecallLimit": {
+      "label": "Reply Recall Limit",
+      "placeholder": "3",
+      "help": "Maximum number of temporary digest recalls injected during assembly."
+    },
+    "digestModel.apiKey": {
+      "label": "Digest API Key",
+      "sensitive": true,
+      "placeholder": "sk-...",
+      "help": "Optional digest-model API key. Leave empty to inherit OpenClaw model auth."
+    },
+    "semanticIndex.apiKey": {
+      "label": "Embedding API Key",
+      "sensitive": true,
+      "placeholder": "sk-...",
+      "help": "API key used for digest embeddings."
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "storePath": {
+        "type": "string"
+      },
+      "tailKeepCount": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "shrinkStartRatio": {
+        "type": "number",
+        "minimum": 0.1,
+        "maximum": 1
+      },
+      "startupRecallLimit": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "replyRecallLimit": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "digestModel": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider": { "type": "string" },
+          "model": { "type": "string" },
+          "apiKey": { "type": "string" },
+          "baseUrl": { "type": "string" }
+        }
+      },
+      "semanticIndex": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider": { "type": "string", "enum": ["openai"] },
+          "model": { "type": "string" },
+          "apiKey": { "type": "string" },
+          "baseUrl": { "type": "string" },
+          "dimensions": { "type": "integer", "minimum": 1 }
+        },
+        "default": {}
+      },
+      "logLevel": {
+        "type": "string",
+        "enum": ["debug", "info", "warn", "error"]
+      }
+    }
+  }
+}
