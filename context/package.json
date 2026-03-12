@@ -1,0 +1,25 @@
+{
+  "name": "@openclaw/context-lancedb",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw LanceDB-backed context engine with digest recall",
+  "type": "module",
+  "dependencies": {
+    "@lancedb/lancedb": "^0.27.0-beta.5",
+    "openclaw": "^2026.3.9"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "scripts": {
+    "build": "rm -rf dist && ../../openclaw/node_modules/.bin/tsc -p tsconfig.build.json",
+    "typecheck": "../../openclaw/node_modules/.bin/tsc -p tsconfig.json --noEmit",
+    "test": "../../openclaw/node_modules/.bin/vitest run --config vitest.config.ts"
+  }
+}

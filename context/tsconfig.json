@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "declaration": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": false,
+    "outDir": "dist",
+    "types": ["node"],
+    "typeRoots": ["../../openclaw/node_modules/@types", "../../openclaw/node_modules"],
+    "baseUrl": ".",
+    "paths": {
+      "openclaw/plugin-sdk": ["./src/types/shims/openclaw-plugin-sdk.d.ts"],
+      "openclaw/context-engine/types": ["./src/types/shims/openclaw-context-engine-types.d.ts"],
+      "@mariozechner/pi-agent-core": [
+        "../../openclaw/node_modules/@mariozechner/pi-agent-core/dist/index.d.ts"
+      ],
+      "@mariozechner/pi-ai": [
+        "../../openclaw/node_modules/@mariozechner/pi-ai/dist/index.d.ts"
+      ],
+      "@lancedb/lancedb": ["./src/types/shims/lancedb.d.ts"],
+      "vitest": ["./src/types/shims/vitest.d.ts"],
+      "vitest/config": ["./src/types/shims/vitest-config.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "openclaw.plugin.json", "package.json"],
+  "exclude": ["dist"]
+}
