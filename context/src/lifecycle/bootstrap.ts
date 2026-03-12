@@ -33,21 +33,21 @@ function overlapsTail(entry: DigestEntry, range: { start: number; end: number } 
   return entry.turn_from <= range.end && range.start <= entry.turn_to;
 }
 
-function pickCandidatesWithinTokenCap(
-  candidates: RecallCandidate[],
+function selectAnchorsWithinTokenCap(
+  recallHits: RecallCandidate[],
   tokenCap: number,
 ): DigestEntry[] {
-  const accepted: DigestEntry[] = [];
-  let used = 0;
-  for (const candidate of candidates) {
-    const next = used + Math.max(candidate.entry.token_estimate, 1);
-    if (accepted.length > 0 && next > tokenCap) {
+  const chosenAnchors: DigestEntry[] = [];
+  let consumedTokens = 0;
+  for (const recallHit of recallHits) {
+    const nextTokenTotal = consumedTokens + Math.max(recallHit.entry.token_estimate, 1);
+    if (chosenAnchors.length > 0 && nextTokenTotal > tokenCap) {
       break;
     }
-    accepted.push(candidate.entry);
-    used = next;
+    chosenAnchors.push(recallHit.entry);
+    consumedTokens = nextTokenTotal;
   }
-  return accepted;
+  return chosenAnchors;
 }
 
 function pickRollups(params: {
@@ -68,8 +68,8 @@ function pickRollups(params: {
     }
     if (
       accepted.some(
-        (existing) =>
-          existing.turn_from <= digest.turn_to && digest.turn_from <= existing.turn_to,
+        (keptDigest) =>
+          keptDigest.turn_from <= digest.turn_to && digest.turn_from <= keptDigest.turn_to,
       )
     ) {
       continue;
@@ -134,7 +134,7 @@ function buildPromptViewRows(params: {
 }
 
 function buildSessionStateRow(params: {
-  existing: SessionStateRow | null;
+  previousRow: SessionStateRow | null;
   sessionId: string;
   sessionFile: string;
   importedTurnCount: number;
@@ -154,9 +154,9 @@ function buildSessionStateRow(params: {
     startup_probe_text: params.startupProbeText,
     dirty_text_index: params.dirtyTextIndex,
     dirty_vector_entry_ids_json: stringifyJson(params.dirtyVectorEntryIds),
-    created_at: params.existing?.created_at ?? timestamp,
+    created_at: params.previousRow?.created_at ?? timestamp,
     updated_at: timestamp,
-    meta_json: params.existing?.meta_json ?? "{}",
+    meta_json: params.previousRow?.meta_json ?? "{}",
   };
 }
 
@@ -165,7 +165,7 @@ async function backfillDigestVectors(
   sessionId: string,
   digests: DigestEntry[],
 ): Promise<string[]> {
-  const pendingIds: string[] = [];
+  const pendingDigestIds: string[] = [];
   for (const digest of digests) {
     if (digest.vector_blob && digest.vector_size > 0) {
       continue;
@@ -184,10 +184,10 @@ async function backfillDigestVectors(
         entryId: digest.entry_id,
         error: error instanceof Error ? error.message : String(error),
       });
-      pendingIds.push(digest.entry_id);
+      pendingDigestIds.push(digest.entry_id);
     }
   }
-  return pendingIds;
+  return pendingDigestIds;
 }
 
 export async function bootstrapContext(
@@ -209,7 +209,7 @@ export async function bootstrapContext(
 
   const turns = await services.entryStoreReader.listTurns(params.sessionId);
   let digests = await services.entryStoreReader.listDigests(params.sessionId);
-  const pendingVectorIds = await backfillDigestVectors(services, params.sessionId, digests);
+  const outstandingVectorIds = await backfillDigestVectors(services, params.sessionId, digests);
   digests = await services.entryStoreReader.listDigests(params.sessionId);
 
   const startupProbeText = buildStartupRecallQuery(
@@ -224,14 +224,14 @@ export async function bootstrapContext(
 
   let anchors: DigestEntry[] = [];
   if (startupProbeText && services.config.startupRecallLimit > 0) {
-    const recalled = await services.hybridRecall.recall({
+    const recallHits = await services.hybridRecall.recall({
       sessionId: params.sessionId,
       query: startupProbeText,
       limit: Math.max(services.config.startupRecallLimit * 4, services.config.startupRecallLimit),
     });
-    anchors = pickCandidatesWithinTokenCap(
+    anchors = selectAnchorsWithinTokenCap(
       filterRecallCandidates({
-        candidates: recalled,
+        candidates: recallHits,
         excludedEntryIds: new Set<string>(),
         protectedTailRange,
         floorScore: services.config.internal.recallFloorScore,
@@ -241,12 +241,12 @@ export async function bootstrapContext(
     );
   }
 
-  const excludedIds = new Set<string>(anchors.map((entry) => entry.entry_id));
+  const blockedEntryIds = new Set<string>(anchors.map((entry) => entry.entry_id));
   const rollups = digests.length === 0
     ? []
     : pickRollups({
         digests,
-        excludedIds,
+        excludedIds: blockedEntryIds,
         protectedTailRange,
         limit: services.config.internal.rollupBaselineLimit,
       });
@@ -275,7 +275,7 @@ export async function bootstrapContext(
   }
 
   const nextState = buildSessionStateRow({
-    existing: existingState,
+    previousRow: existingState,
     sessionId: params.sessionId,
     sessionFile: params.sessionFile,
     importedTurnCount: turns.length,
@@ -283,7 +283,7 @@ export async function bootstrapContext(
     highestLayerNo: digests.reduce((max, digest) => Math.max(max, digest.layer_no), 0),
     startupProbeText,
     dirtyTextIndex: turnDrafts.length > 0,
-    dirtyVectorEntryIds: pendingVectorIds,
+    dirtyVectorEntryIds: outstandingVectorIds,
   });
   await services.sessionStateWriter.upsert(nextState);
   await services.indexMaintainer.retryDirtyState(params.sessionId);

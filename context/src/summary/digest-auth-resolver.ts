@@ -3,45 +3,45 @@
 import type { ResolvedContextConfig } from "../types/config.js";
 import type { DigestResolution } from "../types/runtime.js";
 
-function inferApiFromProvider(provider: string): string {
-  const normalized = provider.trim().toLowerCase();
-  if (normalized === "anthropic") {
+function mapDigestProviderToApi(providerKey: string): string {
+  const normalizedProviderKey = providerKey.trim().toLowerCase();
+  if (normalizedProviderKey === "anthropic") {
     return "anthropic-messages";
   }
-  if (normalized === "openai-codex" || normalized === "github-copilot") {
+  if (normalizedProviderKey === "openai-codex" || normalizedProviderKey === "github-copilot") {
     return "openai-codex-responses";
   }
-  if (normalized === "google-gemini-cli") {
+  if (normalizedProviderKey === "google-gemini-cli") {
     return "google-gemini-cli";
   }
-  if (normalized === "google-vertex") {
+  if (normalizedProviderKey === "google-vertex") {
     return "google-vertex";
   }
-  if (normalized === "google" || normalized === "google-antigravity") {
+  if (normalizedProviderKey === "google" || normalizedProviderKey === "google-antigravity") {
     return "google-generative-ai";
   }
-  if (normalized === "amazon-bedrock") {
+  if (normalizedProviderKey === "amazon-bedrock") {
     return "bedrock-converse-stream";
   }
   return "openai-responses";
 }
 
-function parseModelReference(raw: string): { provider: string; model: string } | null {
-  const trimmed = raw.trim();
-  if (!trimmed) {
+function parseRuntimeModelPointer(rawModelRef: string): { provider: string; model: string } | null {
+  const trimmedModelRef = rawModelRef.trim();
+  if (!trimmedModelRef) {
     return null;
   }
-  if (trimmed.includes("/")) {
-    const [provider, ...rest] = trimmed.split("/");
-    const model = rest.join("/").trim();
-    if (provider?.trim() && model) {
-      return { provider: provider.trim(), model };
+  if (trimmedModelRef.includes("/")) {
+    const [providerKey, ...remainingParts] = trimmedModelRef.split("/");
+    const modelId = remainingParts.join("/").trim();
+    if (providerKey?.trim() && modelId) {
+      return { provider: providerKey.trim(), model: modelId };
     }
   }
-  return { provider: "openai", model: trimmed };
+  return { provider: "openai", model: trimmedModelRef };
 }
 
-export async function resolveDigestModel(params: {
+export async function chooseDigestResolution(params: {
   config: ResolvedContextConfig;
   runtimeBridge: {
     readDefaultModelRef: () => string;
@@ -50,27 +50,34 @@ export async function resolveDigestModel(params: {
   };
 }): Promise<DigestResolution | null> {
   if (params.config.digestModel) {
-    const override = params.config.digestModel;
+    const digestOverride = params.config.digestModel;
     return {
-      provider: override.provider,
-      model: override.model,
-      apiKey: override.apiKey,
-      baseUrl: override.baseUrl,
-      api: params.runtimeBridge.readProviderApi(override.provider) ?? inferApiFromProvider(override.provider),
+      provider: digestOverride.provider,
+      model: digestOverride.model,
+      apiKey: digestOverride.apiKey,
+      baseUrl: digestOverride.baseUrl,
+      api:
+        params.runtimeBridge.readProviderApi(digestOverride.provider) ??
+        mapDigestProviderToApi(digestOverride.provider),
       source: "override",
     };
   }
 
-  const parsed = parseModelReference(params.runtimeBridge.readDefaultModelRef());
-  if (!parsed) {
+  const runtimeModelPointer = parseRuntimeModelPointer(params.runtimeBridge.readDefaultModelRef());
+  if (!runtimeModelPointer) {
     return null;
   }
-  const apiKey = await params.runtimeBridge.resolveApiKeyForModel(parsed.provider, parsed.model);
+  const resolvedApiKey = await params.runtimeBridge.resolveApiKeyForModel(
+    runtimeModelPointer.provider,
+    runtimeModelPointer.model,
+  );
   return {
-    provider: parsed.provider,
-    model: parsed.model,
-    apiKey,
-    api: params.runtimeBridge.readProviderApi(parsed.provider) ?? inferApiFromProvider(parsed.provider),
+    provider: runtimeModelPointer.provider,
+    model: runtimeModelPointer.model,
+    apiKey: resolvedApiKey,
+    api:
+      params.runtimeBridge.readProviderApi(runtimeModelPointer.provider) ??
+      mapDigestProviderToApi(runtimeModelPointer.provider),
     source: "runtime",
   };
 }

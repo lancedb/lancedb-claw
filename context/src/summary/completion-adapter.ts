@@ -58,8 +58,8 @@ async function loadPiAi(): Promise<PiAiModule> {
 
 export async function generateDigestText(params: {
   resolution: DigestResolution;
-  systemPrompt: string;
-  userPrompt: string;
+  instructionText: string;
+  sourceBundleText: string;
   maxTokens: number;
 }): Promise<string> {
   if (!params.resolution.apiKey) {
@@ -72,16 +72,16 @@ export async function generateDigestText(params: {
           | ((provider: string, model: string) => PiAiModel | undefined)
           | undefined)
       : undefined;
-  const resolvedModel = getModel?.(params.resolution.provider, params.resolution.model);
-  const model = resolvedModel ?? buildFallbackModel(params.resolution);
-  const result = await piAi.completeSimple(
-    model,
+  const catalogModel = getModel?.(params.resolution.provider, params.resolution.model);
+  const completionModel = catalogModel ?? buildFallbackModel(params.resolution);
+  const completionResult = await piAi.completeSimple(
+    completionModel,
     {
-      systemPrompt: params.systemPrompt,
+      systemPrompt: params.instructionText,
       messages: [
         {
           role: "user",
-          content: [{ type: "text", text: params.userPrompt }],
+          content: [{ type: "text", text: params.sourceBundleText }],
           timestamp: Date.now(),
         },
       ],
@@ -93,13 +93,13 @@ export async function generateDigestText(params: {
     },
   );
 
-  const text = result.content
+  const digestBodyText = completionResult.content
     .map((block) => ("text" in block && typeof block.text === "string" ? block.text : ""))
     .filter(Boolean)
     .join("\n")
     .trim();
-  if (!text) {
+  if (!digestBodyText) {
     throw new Error("Digest model returned empty content");
   }
-  return text;
+  return digestBodyText;
 }

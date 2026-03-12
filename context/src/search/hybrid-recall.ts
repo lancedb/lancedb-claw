@@ -16,33 +16,33 @@ export class HybridRecall {
     },
   ) {}
 
-  private mergeCandidates(
+  private mergeRecallHits(
     textMatches: RecallCandidate[],
     vectorMatches: RecallCandidate[],
   ): RecallCandidate[] {
     const merged = new Map<string, RecallCandidate>();
 
-    for (const candidate of vectorMatches) {
-      merged.set(candidate.entry.entry_id, { ...candidate });
+    for (const recallHit of vectorMatches) {
+      merged.set(recallHit.entry.entry_id, { ...recallHit });
     }
-    for (const candidate of textMatches) {
-      const existing = merged.get(candidate.entry.entry_id);
-      if (!existing) {
-        merged.set(candidate.entry.entry_id, { ...candidate });
+    for (const recallHit of textMatches) {
+      const mergedHit = merged.get(recallHit.entry.entry_id);
+      if (!mergedHit) {
+        merged.set(recallHit.entry.entry_id, { ...recallHit });
         continue;
       }
-      existing.textScore = Math.max(existing.textScore, candidate.textScore);
-      existing.source = "hybrid";
+      mergedHit.textScore = Math.max(mergedHit.textScore, recallHit.textScore);
+      mergedHit.source = "hybrid";
     }
 
-    const results = [...merged.values()].map((candidate) => ({
-      ...candidate,
+    const rankedHits = [...merged.values()].map((recallHit) => ({
+      ...recallHit,
       score:
-        candidate.vectorScore * this.deps.config.internal.vectorBias +
-        candidate.textScore * this.deps.config.internal.textBias,
+        recallHit.vectorScore * this.deps.config.internal.vectorBias +
+        recallHit.textScore * this.deps.config.internal.textBias,
     }));
 
-    return results.sort((a, b) => b.score - a.score || a.entry.turn_from - b.entry.turn_from);
+    return rankedHits.sort((a, b) => b.score - a.score || a.entry.turn_from - b.entry.turn_from);
   }
 
   async recall(params: {
@@ -71,6 +71,6 @@ export class HybridRecall {
         vectorMatches = [];
       }
     }
-    return this.mergeCandidates(textMatches, vectorMatches);
+    return this.mergeRecallHits(textMatches, vectorMatches);
   }
 }

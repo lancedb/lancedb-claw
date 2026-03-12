@@ -21,21 +21,21 @@ export function buildDigestPrompt(params: {
   sourceEntries: EntryStoreRow[];
   nextLayer: number;
   customInstructions?: string;
-}): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = [
+}): { instructionText: string; sourceBundleText: string } {
+  const digestInstruction = [
     "You compress prior context for an autonomous coding agent.",
     "Write a concise factual digest in English.",
     "Keep decisions, errors, tool outcomes, file paths, and unresolved work.",
     "Do not invent details that are not present in the source entries.",
   ].join(" ");
 
-  const header = `Target layer: ${params.nextLayer}`;
-  const extra = params.customInstructions?.trim()
+  const bundleHeader = `Target layer: ${params.nextLayer}`;
+  const customNote = params.customInstructions?.trim()
     ? `Additional instructions: ${params.customInstructions.trim()}`
     : "";
-  const body = params.sourceEntries.map(renderSourceEntry).join("\n\n");
+  const sourceBundle = params.sourceEntries.map(renderSourceEntry).join("\n\n");
   return {
-    systemPrompt,
-    userPrompt: [header, extra, body].filter(Boolean).join("\n\n"),
+    instructionText: digestInstruction,
+    sourceBundleText: [bundleHeader, customNote, sourceBundle].filter(Boolean).join("\n\n"),
   };
 }

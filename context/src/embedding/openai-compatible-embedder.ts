@@ -11,7 +11,7 @@ export class OpenAICompatibleEmbedder {
   constructor(private readonly config: SemanticIndexConfig) {}
 
   async embedText(text: string): Promise<number[]> {
-    const response = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/embeddings`, {
+    const httpResponse = await fetch(`${normalizeBaseUrl(this.config.baseUrl)}/embeddings`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -26,11 +26,11 @@ export class OpenAICompatibleEmbedder {
       }),
     });
 
-    if (!response.ok) {
-      throw new Error(`Embedding request failed with status ${response.status}`);
+    if (!httpResponse.ok) {
+      throw new Error(`Embedding request failed with status ${httpResponse.status}`);
     }
 
-    const payload = (await response.json()) as {
+    const payload = (await httpResponse.json()) as {
       data?: Array<{ embedding?: number[] }>;
     };
     const vector = payload.data?.[0]?.embedding;

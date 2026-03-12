@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+// Inspired by the context-engine implementation of openclaw and the design and implementation of losses claw
+// https://github.com/Martian-Engineering/lossless-claw
 import type {
   AssembleResult,
   BootstrapResult,

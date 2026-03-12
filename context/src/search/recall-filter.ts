@@ -13,28 +13,28 @@ export function filterRecallCandidates(params: {
   floorScore: number;
   limit: number;
 }): RecallCandidate[] {
-  const accepted: RecallCandidate[] = [];
-  for (const candidate of params.candidates) {
-    if (params.excludedEntryIds.has(candidate.entry.entry_id)) {
+  const shortlistedHits: RecallCandidate[] = [];
+  for (const recallHit of params.candidates) {
+    if (params.excludedEntryIds.has(recallHit.entry.entry_id)) {
       continue;
     }
-    if (candidate.score < params.floorScore) {
+    if (recallHit.score < params.floorScore) {
       continue;
     }
     if (
       params.protectedTailRange &&
-      candidate.entry.turn_from <= params.protectedTailRange.end &&
-      params.protectedTailRange.start <= candidate.entry.turn_to
+      recallHit.entry.turn_from <= params.protectedTailRange.end &&
+      params.protectedTailRange.start <= recallHit.entry.turn_to
     ) {
       continue;
     }
-    if (accepted.some((existing) => overlaps(existing.entry, candidate.entry))) {
+    if (shortlistedHits.some((keptHit) => overlaps(keptHit.entry, recallHit.entry))) {
       continue;
     }
-    accepted.push(candidate);
-    if (accepted.length >= params.limit) {
+    shortlistedHits.push(recallHit);
+    if (shortlistedHits.length >= params.limit) {
       break;
     }
   }
-  return accepted;
+  return shortlistedHits;
 }

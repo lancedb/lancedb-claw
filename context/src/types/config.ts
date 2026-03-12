@@ -95,7 +95,7 @@ const KNOWN_EMBEDDING_DIMS: Record<string, number> = {
   "text-embedding-3-large": 3072,
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isConfigRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
@@ -132,28 +132,34 @@ function requireRatio(value: unknown, label: string, fallback: number): number {
   return value;
 }
 
-function resolveDigestModel(value: unknown): DigestModelConfig | undefined {
+function parseDigestModelOverride(value: unknown): DigestModelConfig | undefined {
   if (value === undefined) {
     return undefined;
   }
-  if (!isRecord(value)) {
+  if (!isConfigRecord(value)) {
     throw new Error("digestModel must be an object");
   }
-  const provider = typeof value.provider === "string" ? resolveEnvVars(value.provider).trim() : "";
-  const model = typeof value.model === "string" ? resolveEnvVars(value.model).trim() : "";
-  const apiKey = typeof value.apiKey === "string" ? resolveEnvVars(value.apiKey).trim() : "";
-  const baseUrl =
+  const providerKey =
+    typeof value.provider === "string" ? resolveEnvVars(value.provider).trim() : "";
+  const modelId = typeof value.model === "string" ? resolveEnvVars(value.model).trim() : "";
+  const apiSecret = typeof value.apiKey === "string" ? resolveEnvVars(value.apiKey).trim() : "";
+  const endpointBaseUrl =
     typeof value.baseUrl === "string" && value.baseUrl.trim()
       ? resolveEnvVars(value.baseUrl).trim()
       : undefined;
-  if (!provider || !model || !apiKey) {
+  if (!providerKey || !modelId || !apiSecret) {
     throw new Error("digestModel.provider, digestModel.model, and digestModel.apiKey are required");
   }
-  return { provider, model, apiKey, baseUrl };
+  return {
+    provider: providerKey,
+    model: modelId,
+    apiKey: apiSecret,
+    baseUrl: endpointBaseUrl,
+  };
 }
 
 function resolveSemanticIndex(value: unknown): SemanticIndexConfig {
-  if (!isRecord(value)) {
+  if (!isConfigRecord(value)) {
     throw new Error("semanticIndex is required");
   }
   const provider = typeof value.provider === "string" ? value.provider.trim() : "openai";
@@ -196,41 +202,41 @@ export function resolveContextConfig(
   value: unknown,
   resolvePath: (input: string) => string,
 ): ResolvedContextConfig {
-  const record = isRecord(value) ? value : {};
-  const semanticIndex = resolveSemanticIndex(record.semanticIndex);
+  const configInput = isConfigRecord(value) ? value : {};
+  const semanticIndex = resolveSemanticIndex(configInput.semanticIndex);
   return {
     storePath: resolveHomeAndPath(
-      typeof record.storePath === "string" ? record.storePath : undefined,
+      typeof configInput.storePath === "string" ? configInput.storePath : undefined,
       resolvePath,
     ),
     tailKeepCount: requirePositiveInteger(
-      record.tailKeepCount,
+      configInput.tailKeepCount,
       "tailKeepCount",
       DEFAULTS.tailKeepCount,
     ),
     shrinkStartRatio: requireRatio(
-      record.shrinkStartRatio,
+      configInput.shrinkStartRatio,
       "shrinkStartRatio",
       DEFAULTS.shrinkStartRatio,
     ),
     startupRecallLimit: requirePositiveInteger(
-      record.startupRecallLimit,
+      configInput.startupRecallLimit,
       "startupRecallLimit",
       DEFAULTS.startupRecallLimit,
     ),
     replyRecallLimit: requirePositiveInteger(
-      record.replyRecallLimit,
+      configInput.replyRecallLimit,
       "replyRecallLimit",
       DEFAULTS.replyRecallLimit,
     ),
-    digestModel: resolveDigestModel(record.digestModel),
+    digestModel: parseDigestModelOverride(configInput.digestModel),
     semanticIndex,
     logLevel:
-      record.logLevel === "debug" ||
-      record.logLevel === "info" ||
-      record.logLevel === "warn" ||
-      record.logLevel === "error"
-        ? record.logLevel
+      configInput.logLevel === "debug" ||
+      configInput.logLevel === "info" ||
+      configInput.logLevel === "warn" ||
+      configInput.logLevel === "error"
+        ? configInput.logLevel
         : DEFAULTS.logLevel,
     internal: { ...DEFAULTS.internal },
   };

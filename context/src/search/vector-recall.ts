@@ -37,6 +37,6 @@ export class VectorRecall {
           source: "vector" as const,
         };
       })
-      .filter((candidate) => candidate.entry.entry_kind === "digest");
+      .filter((recallEntry) => recallEntry.entry.entry_kind === "digest");
   }
 }

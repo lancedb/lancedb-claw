@@ -7,6 +7,6 @@ export function toErrorMessage(error: unknown): string {
   return String(error);
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+export function isPlainObjectRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

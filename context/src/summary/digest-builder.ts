@@ -9,7 +9,7 @@ import { nowIso } from "../helpers/clock.js";
 import { stringifyJson } from "../utils/json.js";
 import { buildDigestPrompt } from "./digest-prompts.js";
 import { buildFallbackDigest } from "./digest-fallback.js";
-import { resolveDigestModel } from "./digest-auth-resolver.js";
+import { chooseDigestResolution } from "./digest-auth-resolver.js";
 import { generateDigestText } from "./completion-adapter.js";
 
 export class DigestBuilder {
@@ -32,12 +32,12 @@ export class DigestBuilder {
   }): Promise<DigestBuildResult> {
     const highestLayer = params.sourceEntries.reduce((max, entry) => Math.max(max, entry.layer_no), 0);
     const nextLayer = highestLayer + 1;
-    const prompt = buildDigestPrompt({
+    const digestPromptBundle = buildDigestPrompt({
       sourceEntries: params.sourceEntries,
       nextLayer,
       customInstructions: params.customInstructions,
     });
-    const resolution = await resolveDigestModel({
+    const resolution = await chooseDigestResolution({
       config: this.deps.config,
       runtimeBridge: this.deps.runtimeBridge,
     });
@@ -48,8 +48,8 @@ export class DigestBuilder {
       try {
         digestText = await generateDigestText({
           resolution,
-          systemPrompt: prompt.systemPrompt,
-          userPrompt: prompt.userPrompt,
+          instructionText: digestPromptBundle.instructionText,
+          sourceBundleText: digestPromptBundle.sourceBundleText,
           maxTokens: this.deps.config.internal.digestOutputMaxTokens,
         });
         source = "model";

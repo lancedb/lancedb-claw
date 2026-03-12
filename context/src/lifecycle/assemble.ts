@@ -133,29 +133,34 @@ export async function assembleContext(
       recallEntries = filtered;
     }
 
-    let keptHistory = historyEntries;
-    let keptRecalls = recallEntries;
+    let baselineHistoryEntries = historyEntries;
+    let injectedRecallEntries = recallEntries;
     if (params.tokenBudget && params.tokenBudget > 0) {
       const tailTokens = sumEntryTokens(tailEntries);
       const recallBudget = Math.min(
         services.config.internal.replyRecallTokenCap,
         Math.max(0, params.tokenBudget - tailTokens),
       );
-      keptRecalls = pickRecallEntriesWithinBudget(recallEntries, recallBudget);
-      const usedRecallTokens = sumEntryTokens(keptRecalls);
-      const remainingBudget = Math.max(0, params.tokenBudget - tailTokens - usedRecallTokens);
-      keptHistory = pickEntriesWithinBudget(historyEntries, remainingBudget);
+      injectedRecallEntries = pickRecallEntriesWithinBudget(recallEntries, recallBudget);
+      const usedRecallTokens = sumEntryTokens(injectedRecallEntries);
+      const historyBudgetAllowance = Math.max(
+        0,
+        params.tokenBudget - tailTokens - usedRecallTokens,
+      );
+      baselineHistoryEntries = pickEntriesWithinBudget(historyEntries, historyBudgetAllowance);
     }
 
     const renderedMessages = [
-      ...keptHistory.map((entry) => toMessage(entry, "history")),
-      ...keptRecalls.map((entry) => renderDigestEntry(entry, "reply_recall")),
+      ...baselineHistoryEntries.map((entry) => toMessage(entry, "history")),
+      ...injectedRecallEntries.map((entry) => renderDigestEntry(entry, "reply_recall")),
       ...tailEntries.map((entry) => toMessage(entry, "history")),
     ];
     return {
       messages: renderedMessages,
       estimatedTokens:
-        sumEntryTokens(keptHistory) + sumEntryTokens(keptRecalls) + sumEntryTokens(tailEntries),
+        sumEntryTokens(baselineHistoryEntries) +
+        sumEntryTokens(injectedRecallEntries) +
+        sumEntryTokens(tailEntries),
     };
   } catch (error) {
     services.logger.warn("assembly fell back to live messages", {

@@ -4,8 +4,8 @@ export class SessionTaskQueue {
   private readonly tails = new Map<string, Promise<unknown>>();
 
   async run<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
-    const previous = this.tails.get(sessionId) ?? Promise.resolve();
-    const next = previous
+    const priorTailPromise = this.tails.get(sessionId) ?? Promise.resolve();
+    const next = priorTailPromise
       .catch(() => undefined)
       .then(task)
       .finally(() => {

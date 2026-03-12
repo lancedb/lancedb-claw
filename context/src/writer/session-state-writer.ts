@@ -6,7 +6,7 @@ import { LanceDbClient } from "../db/client.js";
 import { quoteSqlString } from "../db/schema.js";
 import type { SessionStateRow } from "../types/storage.js";
 
-async function readExistingRow(
+async function readStoredSessionStateRow(
   db: LanceDbClient,
   sessionId: string,
 ): Promise<SessionStateRow | null> {
@@ -48,8 +48,8 @@ export class SessionStateWriter {
 
   async markDirtyText(sessionId: string, value: boolean): Promise<void> {
     const table = await this.db.getSessionStateTable();
-    const existing = await readExistingRow(this.db, sessionId);
-    if (!existing) {
+    const storedRow = await readStoredSessionStateRow(this.db, sessionId);
+    if (!storedRow) {
       return;
     }
     await table.update({
@@ -62,36 +62,36 @@ export class SessionStateWriter {
   }
 
   async addDirtyVectorId(sessionId: string, entryId: string): Promise<void> {
-    const existing = await readExistingRow(this.db, sessionId);
-    if (!existing) {
+    const storedRow = await readStoredSessionStateRow(this.db, sessionId);
+    if (!storedRow) {
       return;
     }
-    const next = new Set(parseJsonArray(existing.dirty_vector_entry_ids_json));
-    next.add(entryId);
+    const nextDirtyIds = new Set(parseJsonArray(storedRow.dirty_vector_entry_ids_json));
+    nextDirtyIds.add(entryId);
     const table = await this.db.getSessionStateTable();
     await table.update({
       where: `session_id = ${quoteSqlString(sessionId)}`,
       values: {
-        dirty_vector_entry_ids_json: stringifyJson([...next]),
+        dirty_vector_entry_ids_json: stringifyJson([...nextDirtyIds]),
         updated_at: nowIso(),
       },
     });
   }
 
   async clearDirtyVectorIds(sessionId: string, entryIds: string[]): Promise<void> {
-    const existing = await readExistingRow(this.db, sessionId);
-    if (!existing || entryIds.length === 0) {
+    const storedRow = await readStoredSessionStateRow(this.db, sessionId);
+    if (!storedRow || entryIds.length === 0) {
       return;
     }
     const toRemove = new Set(entryIds);
-    const next = parseJsonArray(existing.dirty_vector_entry_ids_json).filter(
+    const remainingDirtyIds = parseJsonArray(storedRow.dirty_vector_entry_ids_json).filter(
       (entryId) => !toRemove.has(entryId),
     );
     const table = await this.db.getSessionStateTable();
     await table.update({
       where: `session_id = ${quoteSqlString(sessionId)}`,
       values: {
-        dirty_vector_entry_ids_json: stringifyJson(next),
+        dirty_vector_entry_ids_json: stringifyJson(remainingDirtyIds),
         updated_at: nowIso(),
       },
     });

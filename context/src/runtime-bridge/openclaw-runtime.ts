@@ -4,39 +4,23 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { ContextLogger } from "../types/domain.js";
 import type { RuntimeModelAuth, RuntimeModelAuthLookupModel } from "../types/runtime.js";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRuntimeObjectRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function inferApiFromProvider(provider: string): string {
-  const normalized = provider.trim().toLowerCase();
-  if (normalized === "anthropic") {
-    return "anthropic-messages";
-  }
-  if (normalized === "openai-codex" || normalized === "github-copilot") {
-    return "openai-codex-responses";
-  }
-  if (normalized === "google" || normalized === "google-antigravity") {
-    return "google-generative-ai";
-  }
-  if (normalized === "google-gemini-cli") {
-    return "google-gemini-cli";
-  }
-  if (normalized === "google-vertex") {
-    return "google-vertex";
-  }
-  if (normalized === "amazon-bedrock") {
-    return "bedrock-converse-stream";
-  }
+function inferRuntimeApi(providerKey: string): string {
   return "openai-responses";
 }
 
-function buildLookupModel(provider: string, model: string): RuntimeModelAuthLookupModel {
+function buildAuthLookupDescriptor(
+  providerKey: string,
+  modelId: string,
+): RuntimeModelAuthLookupModel {
   return {
-    id: model,
-    name: model,
-    provider,
-    api: inferApiFromProvider(provider),
+    id: modelId,
+    name: modelId,
+    provider: providerKey,
+    api: inferRuntimeApi(providerKey),
     reasoning: true,
     input: ["text"],
     cost: {
@@ -56,59 +40,66 @@ export class OpenClawRuntimeBridge {
     private readonly logger: ContextLogger,
   ) {}
 
-  private getModelAuth(): RuntimeModelAuth | undefined {
-    const runtime = this.api.runtime as OpenClawPluginApi["runtime"] & {
+  private readRuntimeModelAuth(): RuntimeModelAuth | undefined {
+    const runtimeBinding = this.api.runtime as OpenClawPluginApi["runtime"] & {
       modelAuth?: RuntimeModelAuth;
     };
-    return runtime.modelAuth;
+    return runtimeBinding.modelAuth;
   }
 
   readDefaultModelRef(): string {
-    const config = this.api.config as Record<string, unknown>;
-    const agents = isRecord(config.agents) ? config.agents : undefined;
-    const defaults = agents && isRecord(agents.defaults) ? agents.defaults : undefined;
-    const model = defaults?.model;
-    if (typeof model === "string") {
-      return model.trim();
+    const rootConfig = this.api.config as Record<string, unknown>;
+    const agentConfig = isRuntimeObjectRecord(rootConfig.agents) ? rootConfig.agents : undefined;
+    const defaultAgentConfig =
+      agentConfig && isRuntimeObjectRecord(agentConfig.defaults) ? agentConfig.defaults : undefined;
+    const primaryModelRef = defaultAgentConfig?.model;
+    if (typeof primaryModelRef === "string") {
+      return primaryModelRef.trim();
     }
-    if (isRecord(model) && typeof model.primary === "string") {
-      return model.primary.trim();
+    if (
+      isRuntimeObjectRecord(primaryModelRef) &&
+      typeof primaryModelRef.primary === "string"
+    ) {
+      return primaryModelRef.primary.trim();
     }
     return "";
   }
 
-  readProviderApi(provider: string): string | undefined {
-    const config = this.api.config as Record<string, unknown>;
-    const models = isRecord(config.models) ? config.models : undefined;
-    const providers = models && isRecord(models.providers) ? models.providers : undefined;
-    if (!providers) {
+  readProviderApi(providerKey: string): string | undefined {
+    const rootConfig = this.api.config as Record<string, unknown>;
+    const modelCatalog = isRuntimeObjectRecord(rootConfig.models) ? rootConfig.models : undefined;
+    const providerCatalog =
+      modelCatalog && isRuntimeObjectRecord(modelCatalog.providers)
+        ? modelCatalog.providers
+        : undefined;
+    if (!providerCatalog) {
       return undefined;
     }
-    const providerConfig = providers[provider];
-    if (!isRecord(providerConfig)) {
+    const providerEntry = providerCatalog[providerKey];
+    if (!isRuntimeObjectRecord(providerEntry)) {
       return undefined;
     }
-    return typeof providerConfig.api === "string" ? providerConfig.api.trim() : undefined;
+    return typeof providerEntry.api === "string" ? providerEntry.api.trim() : undefined;
   }
 
-  async resolveApiKeyForModel(provider: string, model: string): Promise<string | undefined> {
-    const modelAuth = this.getModelAuth();
-    if (!modelAuth) {
+  async resolveApiKeyForModel(providerKey: string, modelId: string): Promise<string | undefined> {
+    const runtimeAuth = this.readRuntimeModelAuth();
+    if (!runtimeAuth) {
       this.logger.debug("runtime modelAuth unavailable");
       return undefined;
     }
     try {
-      const result = await modelAuth.getApiKeyForModel({
-        model: buildLookupModel(provider, model),
+      const authLookup = await runtimeAuth.getApiKeyForModel({
+        model: buildAuthLookupDescriptor(providerKey, modelId),
         cfg: this.api.config,
       });
-      return typeof result?.apiKey === "string" && result.apiKey.trim()
-        ? result.apiKey.trim()
+      return typeof authLookup?.apiKey === "string" && authLookup.apiKey.trim()
+        ? authLookup.apiKey.trim()
         : undefined;
     } catch (error) {
       this.logger.debug("runtime modelAuth lookup failed", {
-        provider,
-        model,
+        provider: providerKey,
+        model: modelId,
         error: error instanceof Error ? error.message : String(error),
       });
       return undefined;

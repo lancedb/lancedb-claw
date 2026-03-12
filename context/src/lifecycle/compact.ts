@@ -34,7 +34,7 @@ function makePromptSlot(params: {
 }
 
 function buildSessionStateRow(params: {
-  existing: SessionStateRow | null;
+  previousRow: SessionStateRow | null;
   sessionId: string;
   sessionFile: string;
   importedTurnCount: number;
@@ -47,13 +47,13 @@ function buildSessionStateRow(params: {
     session_file: params.sessionFile,
     imported_turn_count: params.importedTurnCount,
     last_turn_seq: params.lastTurnSeq,
-    highest_layer_no: Math.max(params.existing?.highest_layer_no ?? 0, params.highestLayerNo),
-    startup_probe_text: params.existing?.startup_probe_text ?? "",
-    dirty_text_index: params.existing?.dirty_text_index ?? false,
-    dirty_vector_entry_ids_json: params.existing?.dirty_vector_entry_ids_json ?? "[]",
-    created_at: params.existing?.created_at ?? timestamp,
+    highest_layer_no: Math.max(params.previousRow?.highest_layer_no ?? 0, params.highestLayerNo),
+    startup_probe_text: params.previousRow?.startup_probe_text ?? "",
+    dirty_text_index: params.previousRow?.dirty_text_index ?? false,
+    dirty_vector_entry_ids_json: params.previousRow?.dirty_vector_entry_ids_json ?? "[]",
+    created_at: params.previousRow?.created_at ?? timestamp,
     updated_at: timestamp,
-    meta_json: params.existing?.meta_json ?? "{}",
+    meta_json: params.previousRow?.meta_json ?? "{}",
   };
 }
 
@@ -69,19 +69,23 @@ function selectCompactionWindow(
   protectedTailStart: number,
   services: ContextServices,
 ): CompactionWindow | null {
-  const candidates = entries.slice(0, protectedTailStart);
-  for (let startIndex = 0; startIndex < candidates.length; startIndex += 1) {
-    const first = candidates[startIndex]!.entry;
-    if (first.entry_kind === "turn") {
+  const eligibleWindowEntries = entries.slice(0, protectedTailStart);
+  for (let startIndex = 0; startIndex < eligibleWindowEntries.length; startIndex += 1) {
+    const firstEntry = eligibleWindowEntries[startIndex]!.entry;
+    if (firstEntry.entry_kind === "turn") {
       const window: OrderedSlotEntry[] = [];
       let covered = 0;
-      for (let index = startIndex; index < candidates.length; index += 1) {
-        const item = candidates[index]!;
-        if (item.entry.entry_kind !== "turn") {
+      for (let index = startIndex; index < eligibleWindowEntries.length; index += 1) {
+        const slotEntry = eligibleWindowEntries[index]!;
+        if (slotEntry.entry.entry_kind !== "turn") {
           break;
         }
-        window.push(item);
-        covered += Math.max(item.entry.covered_token_estimate, item.entry.token_estimate, 1);
+        window.push(slotEntry);
+        covered += Math.max(
+          slotEntry.entry.covered_token_estimate,
+          slotEntry.entry.token_estimate,
+          1,
+        );
         if (
           window.length >= services.config.internal.firstDigestMinCount &&
           covered >= services.config.internal.firstDigestTokenGoal
@@ -99,16 +103,20 @@ function selectCompactionWindow(
       continue;
     }
 
-    const layerNo = first.layer_no;
+    const layerNo = firstEntry.layer_no;
     const window: OrderedSlotEntry[] = [];
     let covered = 0;
-    for (let index = startIndex; index < candidates.length; index += 1) {
-      const item = candidates[index]!;
-      if (item.entry.entry_kind !== "digest" || item.entry.layer_no !== layerNo) {
+    for (let index = startIndex; index < eligibleWindowEntries.length; index += 1) {
+      const slotEntry = eligibleWindowEntries[index]!;
+      if (slotEntry.entry.entry_kind !== "digest" || slotEntry.entry.layer_no !== layerNo) {
         break;
       }
-      window.push(item);
-      covered += Math.max(item.entry.covered_token_estimate, item.entry.token_estimate, 1);
+      window.push(slotEntry);
+      covered += Math.max(
+        slotEntry.entry.covered_token_estimate,
+        slotEntry.entry.token_estimate,
+        1,
+      );
       if (
         window.length >= services.config.internal.mergeDigestMinCount &&
         covered >= services.config.internal.mergeDigestTokenGoal
@@ -202,13 +210,13 @@ export async function compactContext(
     };
   }
 
-  const existingState = await services.sessionStateReader.get(params.sessionId);
-  if (!existingState) {
+  const previousState = await services.sessionStateReader.get(params.sessionId);
+  if (!previousState) {
     const turns = await services.entryStoreReader.listTurns(params.sessionId);
     const digests = await services.entryStoreReader.listDigests(params.sessionId);
     await services.sessionStateWriter.upsert(
       buildSessionStateRow({
-        existing: null,
+        previousRow: null,
         sessionId: params.sessionId,
         sessionFile: params.sessionFile,
         importedTurnCount: turns.length,
@@ -289,12 +297,12 @@ export async function compactContext(
   const turns = await services.entryStoreReader.listTurns(params.sessionId);
   const digests = await services.entryStoreReader.listDigests(params.sessionId);
   const refreshedState = await services.sessionStateReader.get(params.sessionId);
-  await services.sessionStateWriter.upsert(
-    buildSessionStateRow({
-      existing: refreshedState,
-      sessionId: params.sessionId,
-      sessionFile: params.sessionFile,
-      importedTurnCount: turns.length,
+    await services.sessionStateWriter.upsert(
+      buildSessionStateRow({
+        previousRow: refreshedState,
+        sessionId: params.sessionId,
+        sessionFile: params.sessionFile,
+        importedTurnCount: turns.length,
       lastTurnSeq: turns[turns.length - 1]?.turn_to ?? 0,
       highestLayerNo: Math.max(
         digestRow.layer_no,

@@ -83,12 +83,12 @@ export function readSessionMessagesFromFile(sessionFile: string): AgentMessage[]
       }
       try {
         const parsed = JSON.parse(item) as unknown;
-        const candidate =
+        const parsedMessage =
           parsed && typeof parsed === "object" && "message" in (parsed as Record<string, unknown>)
             ? (parsed as { message?: unknown }).message
             : parsed;
-        if (isSupportedMessage(candidate)) {
-          messages.push(candidate);
+        if (isSupportedMessage(parsedMessage)) {
+          messages.push(parsedMessage);
         }
       } catch {
         // Skip malformed transcript lines.

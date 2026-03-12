@@ -21,15 +21,15 @@ export async function afterTurnContext(
     runtimeContext?: Record<string, unknown>;
   },
 ): Promise<void> {
-  const newMessages = params.messages.slice(params.prePromptMessageCount);
-  if (newMessages.length === 0) {
+  const turnDeltaMessages = params.messages.slice(params.prePromptMessageCount);
+  if (turnDeltaMessages.length === 0) {
     return;
   }
 
   const appendResult = await appendTurnMessages(services, {
     sessionId: params.sessionId,
     sessionFile: params.sessionFile,
-    messages: newMessages,
+    messages: turnDeltaMessages,
   });
   if (appendResult.rows.length === 0) {
     return;

@@ -4,13 +4,26 @@
   "private": true,
   "description": "OpenClaw LanceDB-backed context engine with digest recall",
   "type": "module",
+  "files": [
+    "src/",
+    "dist/",
+    "openclaw.plugin.json",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
   "dependencies": {
     "@lancedb/lancedb": "^0.27.0-beta.5",
-    "openclaw": "^2026.3.9"
+    "@mariozechner/pi-agent-core": "^0.57.1",
+    "@mariozechner/pi-ai": "^0.57.1"
   },
   "devDependencies": {
+    "@types/node": "^24.3.3",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "openclaw": "*"
   },
   "openclaw": {
     "extensions": [
@@ -18,8 +31,8 @@
     ]
   },
   "scripts": {
-    "build": "rm -rf dist && ../../openclaw/node_modules/.bin/tsc -p tsconfig.build.json",
-    "typecheck": "../../openclaw/node_modules/.bin/tsc -p tsconfig.json --noEmit",
-    "test": "../../openclaw/node_modules/.bin/vitest run --config vitest.config.ts"
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --config vitest.config.ts"
   }
 }
