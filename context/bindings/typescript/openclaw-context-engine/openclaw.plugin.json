@@ -1,0 +1,144 @@
+{
+  "id": "context-lancedb",
+  "kind": "context-engine",
+  "name": "Context Engine (LanceDB)",
+  "description": "LanceDB-backed context engine for session summaries and detail recall",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "retrievalEnabled": {
+        "type": "boolean"
+      },
+      "skillSearchEnabled": {
+        "type": "boolean"
+      },
+      "skillSearchRecentMessageCount": {
+        "type": "number",
+        "minimum": 1
+      },
+      "skillSearchCandidateLimit": {
+        "type": "number",
+        "minimum": 1
+      },
+      "skillSearchMinResults": {
+        "type": "number",
+        "minimum": 1
+      },
+      "skillSearchCacheSize": {
+        "type": "number",
+        "minimum": 1
+      },
+      "skillSearchCleanupOlderThanDays": {
+        "type": "number",
+        "minimum": 0
+      },
+      "skillSearchMaxDistance": {
+        "type": "number",
+        "minimum": 0
+      },
+      "skillSyncIntervalSeconds": {
+        "type": "number",
+        "minimum": 1
+      },
+      "dbPath": {
+        "type": "string"
+      },
+      "freshTailCount": {
+        "type": "number",
+        "minimum": 1
+      },
+      "summaryRecallLimit": {
+        "type": "number",
+        "minimum": 1
+      },
+      "recentSummaryCount": {
+        "type": "number",
+        "minimum": 0
+      },
+      "detailMessagesPerSummary": {
+        "type": "number",
+        "minimum": 0
+      },
+      "retrievalTokenReserve": {
+        "type": "number",
+        "minimum": 128
+      },
+      "retry": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "number",
+            "minimum": 1
+          },
+          "minDelayMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "maxDelayMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "jitter": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "embedding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["openai", "doubao", "local"]
+          },
+          "model": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "dimensions": {
+            "type": "number",
+            "minimum": 1
+          },
+          "localModelPath": {
+            "type": "string"
+          },
+          "localModelCacheDir": {
+            "type": "string"
+          },
+          "retry": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "maxRetries": {
+                "type": "number",
+                "minimum": 1
+              },
+              "initialDelayMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "maxDelayMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "timeoutMs": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "required": ["provider"]
+      }
+    }
+  }
+}

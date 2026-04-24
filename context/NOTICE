@@ -1,8 +1,0 @@
-LanceDB Context Engine
-Copyright 2026 The OpenClaw Contributors
-
-This product is licensed under the Apache License, Version 2.0.
-
-This package is designed to integrate with OpenClaw and LanceDB, but its
-internal naming, storage model, prompt templates, and lifecycle orchestration
-are original to this repository.
