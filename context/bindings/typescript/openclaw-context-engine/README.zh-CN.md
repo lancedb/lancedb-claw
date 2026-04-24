@@ -2,7 +2,7 @@
 
 `@lancedb-claw/context-lancedb` 是一个基于 LanceDB 的 OpenClaw context engine 插件。
 
-建议配合 `2026.3.23+` 版本的 OpenClaw 使用。
+建议配合 `2026.4.15+` 版本的 OpenClaw 使用。
 
 当前这个 context engine 主要提供两个能力：
 

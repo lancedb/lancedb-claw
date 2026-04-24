@@ -20,9 +20,11 @@ import type {
   PluginLogger,
 } from "openclaw/plugin-sdk";
 import type { ContextLanceDbConfig } from "./config.js";
-import { RetrievalEngineModule } from "./engine/retrieval.js";
-import { SkillSearchEngineModule } from "./engine/skill-search.js";
 import { CopiedLegacyContextEngine } from "./engine/legacy.js";
+import { RetrievalRule } from "./rules/retrieval-rule.js";
+import { SkillSearchRule } from "./rules/skill-search-rule.js";
+import { ContextEngineRuleRegistry } from "./rules/registry.js";
+import { ContextEngineRuleRunner } from "./rules/runner.js";
 import { ContextLanceDbStore } from "./store.js";
 import type {
   ContextEngineAfterTurnParams,
@@ -43,6 +45,7 @@ import type {
   ContextEnginePrepareSubagentSpawnParams,
   ContextEnginePrepareSubagentSpawnResult,
 } from "./types.js";
+import type { ContextEngineRule } from "./rules/base.js";
 
 type ContextEmbeddingClient = {
   embed(text: string): Promise<number[]>;
@@ -58,8 +61,7 @@ export class LanceDBContextEngine implements ContextEngine {
 
   private readonly legacyEngine = new CopiedLegacyContextEngine();
   private readonly store: ContextLanceDbStore | null;
-  private readonly retrievalEngine: RetrievalEngineModule | null;
-  private readonly skillSearchEngine: SkillSearchEngineModule | null;
+  private readonly ruleRunner: ContextEngineRuleRunner;
 
   constructor(
     private readonly config: ContextLanceDbConfig,
@@ -78,20 +80,32 @@ export class LanceDBContextEngine implements ContextEngine {
           this.deps.logger,
         )
       : null;
-    this.retrievalEngine = this.isRetrievalEnabled()
-      ? new RetrievalEngineModule(this.config, {
+    const rules: ContextEngineRule[] = [];
+    if (this.store) {
+      rules.push(
+        new RetrievalRule(this.config, {
           logger: this.deps.logger,
-          store: this.getStore(),
-          legacyCompact: (params) => this.legacyEngine.compact(params),
-        })
-      : null;
-    this.skillSearchEngine = this.isSkillSearchEnabled()
-      ? new SkillSearchEngineModule(this.config, {
+          store: this.store,
+          legacyEngine: this.legacyEngine,
+        }),
+        new SkillSearchRule(this.config, {
           logger: this.deps.logger,
-          store: this.getStore(),
+          store: this.store,
           loadSessionStore: this.deps.loadSessionStore,
-        })
-      : null;
+        }),
+      );
+    }
+    this.ruleRunner = new ContextEngineRuleRunner(
+      new ContextEngineRuleRegistry(rules),
+      {
+        config: this.config,
+        logger: this.deps.logger,
+        store: this.store,
+        legacyEngine: this.legacyEngine,
+        openClawConfig: this.deps.openClawConfig,
+        loadSessionStore: this.deps.loadSessionStore,
+      },
+    );
   }
 
   private isRetrievalEnabled(): boolean {
@@ -110,84 +124,11 @@ export class LanceDBContextEngine implements ContextEngine {
   }
 
   warmup(): void {
-    if (this.isSkillSearchEnabled()) {
-      this.getSkillSearchEngine().warmup();
-    }
-    if (this.isRetrievalEnabled()) {
-      this.getRetrievalEngine().warmup();
-    }
+    this.ruleRunner.warmup();
   }
 
   async initialize(): Promise<void> {
-    if (!this.isRetrievalEnabled() && !this.isSkillSearchEnabled()) {
-      return;
-    }
-    await this.getStore().initialize();
-  }
-
-  private getRetrievalEngine(): RetrievalEngineModule {
-    if (!this.retrievalEngine) {
-      throw new Error("context-lancedb: retrieval is disabled");
-    }
-    return this.retrievalEngine;
-  }
-
-  private getSkillSearchEngine(): SkillSearchEngineModule {
-    if (!this.skillSearchEngine) {
-      throw new Error("context-lancedb: skill search is disabled");
-    }
-    return this.skillSearchEngine;
-  }
-
-  private async retrievalBootstrapImpl(params: {
-    sessionId: ContextEngineBootstrapParams["sessionId"];
-    sessionKey?: ContextEngineBootstrapParams["sessionKey"];
-    sessionFile: ContextEngineBootstrapParams["sessionFile"];
-  }): Promise<ContextEngineBootstrapResult> {
-    return this.getRetrievalEngine().bootstrap(params);
-  }
-
-  private async skillSearchBootstrapImpl(
-    params: ContextEngineBootstrapParams,
-  ): Promise<ContextEngineBootstrapResult> {
-    return this.getSkillSearchEngine().bootstrap(params);
-  }
-
-  private async retrievalAssembleImpl(params: ContextEngineAssembleParams): Promise<ContextEngineAssembleResult> {
-    return this.getRetrievalEngine().assemble(params);
-  }
-
-  private async retrievalIngestImpl(params: ContextEngineIngestParams): Promise<ContextEngineIngestResult> {
-    return this.getRetrievalEngine().ingest(params);
-  }
-
-  private async retrievalIngestBatchImpl(
-    params: ContextEngineIngestBatchParams,
-  ): Promise<ContextEngineIngestBatchResult> {
-    return this.getRetrievalEngine().ingestBatch(params);
-  }
-
-  private async retrievalAfterTurnImpl(params: ContextEngineAfterTurnParams): Promise<void> {
-    return this.getRetrievalEngine().afterTurn(params);
-  }
-
-  private async retrievalCompactImpl(params: ContextEngineCompactParams): Promise<ContextEngineCompactResult> {
-    return this.getRetrievalEngine().compact(params);
-  }
-
-  private async skillSearchAssembleImpl(params: {
-    sessionId: ContextEngineAssembleParams["sessionId"];
-    sessionKey?: ContextEngineAssembleParams["sessionKey"];
-    messages: ContextEngineAssembleParams["messages"];
-    tokenBudget?: ContextEngineAssembleParams["tokenBudget"];
-    prompt?: ContextEngineAssembleParams["prompt"];
-    baseResult: ContextEngineAssembleResult;
-  }): Promise<ContextEngineAssembleResult> {
-    return this.getSkillSearchEngine().assemble(params);
-  }
-
-  private async skillSearchAfterTurnImpl(params: ContextEngineAfterTurnParams): Promise<void> {
-    return this.getSkillSearchEngine().afterTurn(params);
+    await this.ruleRunner.initialize();
   }
 
 
@@ -198,26 +139,10 @@ export class LanceDBContextEngine implements ContextEngine {
     const startedAt = Date.now();
     let result: ContextEngineBootstrapResult;
     try {
-      let retrievalResult: ContextEngineBootstrapResult | null = null;
-      if (this.isRetrievalEnabled()) {
-        retrievalResult = await this.retrievalBootstrapImpl(params);
-      }
-      if (this.isSkillSearchEnabled()) {
-        await this.skillSearchBootstrapImpl(params);
-      }
-      if (retrievalResult) {
-        result = retrievalResult;
-      } else if (this.isSkillSearchEnabled()) {
-        result = {
-          bootstrapped: true,
-          reason: "skill-search-only",
-        };
-      } else {
-        result = {
-          bootstrapped: false as const,
-          reason: "disabled",
-        };
-      }
+      result = (await this.ruleRunner.bootstrap(params)) ?? {
+        bootstrapped: false as const,
+        reason: "disabled",
+      };
     } finally {
       const elapsedMs = Date.now() - startedAt;
       const sessionKey = params.sessionKey?.trim() || "unknown";
@@ -230,21 +155,15 @@ export class LanceDBContextEngine implements ContextEngine {
   }
 
   async ingest(params: ContextEngineIngestParams): Promise<ContextEngineIngestResult> {
-    if (this.isRetrievalEnabled()) {
-      return this.retrievalIngestImpl(params);
-    }
-    return { ingested: false };
+    return (await this.ruleRunner.ingest(params)) ?? { ingested: false };
   }
 
   async ingestBatch(params: ContextEngineIngestBatchParams): Promise<ContextEngineIngestBatchResult> {
-    if (this.isRetrievalEnabled()) {
-      return this.retrievalIngestBatchImpl(params);
-    }
-    return { ingestedCount: 0 };
+    return (await this.ruleRunner.ingestBatch(params)) ?? { ingestedCount: 0 };
   }
 
-  async maintain(_params: ContextEngineMaintainParams): Promise<ContextEngineMaintainResult> {
-    return {
+  async maintain(params: ContextEngineMaintainParams): Promise<ContextEngineMaintainResult> {
+    return (await this.ruleRunner.maintain(params)) ?? {
       changed: false,
       bytesFreed: 0,
       rewrittenEntries: 0,
@@ -253,51 +172,37 @@ export class LanceDBContextEngine implements ContextEngine {
   }
 
   async assemble(params: ContextEngineAssembleParams): Promise<ContextEngineAssembleResult> {
-    if (!this.isRetrievalEnabled() && !this.isSkillSearchEnabled()) {
+    if (!this.ruleRunner.hasEnabledRules()) {
       return this.legacyEngine.assemble(params);
     }
-    const baseResult = this.isRetrievalEnabled()
-      ? await this.retrievalAssembleImpl(params)
-      : {
-          messages: params.messages,
-          estimatedTokens: 0,
-        };
-    if (this.isSkillSearchEnabled()) {
-      return this.skillSearchAssembleImpl({
-        ...params,
-        baseResult,
-      });
-    }
-    return baseResult;
+    return this.ruleRunner.assemble(params, {
+      messages: params.messages,
+      estimatedTokens: 0,
+    });
   }
 
   async afterTurn(params: ContextEngineAfterTurnParams): Promise<void> {
-    if (!this.isRetrievalEnabled() && !this.isSkillSearchEnabled()) {
+    if (!this.ruleRunner.hasEnabledRules()) {
       return this.legacyEngine.afterTurn(params);
     }
-    if (this.isRetrievalEnabled()) {
-      await this.retrievalAfterTurnImpl(params);
-    }
-    if (this.isSkillSearchEnabled()) {
-      await this.skillSearchAfterTurnImpl(params);
-    }
+    await this.ruleRunner.afterTurn(params);
   }
 
   async compact(params: ContextEngineCompactParams): Promise<ContextEngineCompactResult> {
-    if (this.isRetrievalEnabled()) {
-      return this.retrievalCompactImpl(params);
-    }
-    return this.legacyEngine.compact(params);
+    return (await this.ruleRunner.compact(params)) ?? this.legacyEngine.compact(params);
   }
 
   async prepareSubagentSpawn(
-    _params: ContextEnginePrepareSubagentSpawnParams,
+    params: ContextEnginePrepareSubagentSpawnParams,
   ): Promise<ContextEnginePrepareSubagentSpawnResult> {
-    return undefined;
+    return this.ruleRunner.prepareSubagentSpawn(params);
   }
 
-  async onSubagentEnded(_params: ContextEngineOnSubagentEndedParams): Promise<void> {}
+  async onSubagentEnded(params: ContextEngineOnSubagentEndedParams): Promise<void> {
+    await this.ruleRunner.onSubagentEnded(params);
+  }
 
   async dispose(): Promise<void> {
+    await this.ruleRunner.dispose();
   }
 }

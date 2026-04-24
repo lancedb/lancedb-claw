@@ -128,6 +128,10 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
         return ok(sanitized.map((val) => val / magnitude));
       }
 
+      if (sanitized.length > 0 && text.trim().length > 0) {
+        throw new Error("local embedding model returned a zero vector");
+      }
+
       return ok(sanitized);
     } catch (error) {
       return err(this.parseLocalError(error));

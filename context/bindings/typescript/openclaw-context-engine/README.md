@@ -2,7 +2,7 @@
 
 `@lancedb-claw/context-lancedb` is a LanceDB-backed context engine plugin for OpenClaw.
 
-Recommended OpenClaw version: `2026.3.23+`.
+Recommended OpenClaw version: `2026.4.15+`.
 
 At the moment, this context engine mainly provides two capabilities:
 

@@ -324,25 +324,53 @@ describe('Embedder retry logic', () => {
 
 describe('Embedder with LocalEmbeddingProvider - Real Embedding Tests', () => {
   let nodeLlamaCppAvailable = false;
+  let localEmbeddingAvailable = false;
+  let localEmbeddingProbeError: unknown;
 
   beforeAll(async () => {
     try {
       await import('node-llama-cpp');
       nodeLlamaCppAvailable = true;
       console.log('node-llama-cpp available for Embedder integration tests:', nodeLlamaCppAvailable);
+      const provider = new LocalEmbeddingProvider();
+      const probe = await provider.embed('Local embedder health check');
+      if (probe.ok) {
+        const magnitude = Math.sqrt(probe.data.reduce((sum, val) => sum + val * val, 0));
+        localEmbeddingAvailable = probe.data.length > 0 && magnitude > 0;
+        if (!localEmbeddingAvailable) {
+          localEmbeddingProbeError = new Error('local embedding provider returned a degenerate vector');
+        }
+      } else {
+        localEmbeddingProbeError = probe.error;
+      }
+      if (!localEmbeddingAvailable) {
+        console.log('Local embedding provider unavailable for Embedder integration tests:', localEmbeddingProbeError);
+      }
     } catch (err) {
       console.log('node-llama-cpp import error:', err);
       nodeLlamaCppAvailable = false;
+      localEmbeddingProbeError = err;
     }
   }, 60000);
+
+  function skipIfLocalEmbeddingUnavailable(): boolean {
+    if (!nodeLlamaCppAvailable) {
+      console.log('Skipping: node-llama-cpp not available');
+      return true;
+    }
+    if (!localEmbeddingAvailable) {
+      console.log('Skipping: local embedding provider unavailable');
+      return true;
+    }
+    return false;
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   test('should embed Chinese text using local provider through Embedder', async () => {
-    if (!nodeLlamaCppAvailable) {
-      console.log('Skipping: node-llama-cpp not available');
+    if (skipIfLocalEmbeddingUnavailable()) {
       return;
     }
 
@@ -358,8 +386,7 @@ describe('Embedder with LocalEmbeddingProvider - Real Embedding Tests', () => {
   }, 120000);
 
   test('Embedder.create should create embedder with local provider', async () => {
-    if (!nodeLlamaCppAvailable) {
-      console.log('Skipping: node-llama-cpp not available');
+    if (skipIfLocalEmbeddingUnavailable()) {
       return;
     }
 

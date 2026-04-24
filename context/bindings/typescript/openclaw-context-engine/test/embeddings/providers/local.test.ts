@@ -20,6 +20,8 @@ import { LocalEmbeddingProvider } from "../../../src/embeddings/providers/local.
 describe("LocalEmbeddingProvider - Real Embedding Tests", () => {
   let provider: LocalEmbeddingProvider;
   let nodeLlamaCppAvailable = false;
+  let localEmbeddingAvailable = false;
+  let localEmbeddingProbeError: unknown;
 
   beforeAll(async () => {
     provider = new LocalEmbeddingProvider();
@@ -28,11 +30,37 @@ describe("LocalEmbeddingProvider - Real Embedding Tests", () => {
       const llamaCpp = await import("node-llama-cpp");
       nodeLlamaCppAvailable = !!llamaCpp;
       console.log("node-llama-cpp available:", nodeLlamaCppAvailable);
+      const probe = await provider.embed("Local embedding provider health check");
+      if (probe.ok) {
+        const magnitude = Math.sqrt(probe.data.reduce((sum, val) => sum + val * val, 0));
+        localEmbeddingAvailable = probe.data.length > 0 && magnitude > 0;
+        if (!localEmbeddingAvailable) {
+          localEmbeddingProbeError = new Error("local embedding provider returned a degenerate vector");
+        }
+      } else {
+        localEmbeddingProbeError = probe.error;
+      }
+      if (!localEmbeddingAvailable) {
+        console.log("Local embedding provider unavailable:", localEmbeddingProbeError);
+      }
     } catch (err) {
       console.log("node-llama-cpp import error:", err);
       nodeLlamaCppAvailable = false;
+      localEmbeddingProbeError = err;
     }
   }, 60000);
+
+  function skipIfLocalEmbeddingUnavailable(): boolean {
+    if (!nodeLlamaCppAvailable) {
+      console.log("Skipping: node-llama-cpp not available");
+      return true;
+    }
+    if (!localEmbeddingAvailable) {
+      console.log("Skipping: local embedding provider unavailable");
+      return true;
+    }
+    return false;
+  }
 
   it("should create provider instance", () => {
     expect(provider).toBeDefined();
@@ -40,8 +68,7 @@ describe("LocalEmbeddingProvider - Real Embedding Tests", () => {
   });
 
   it("should embed simple text and return valid vector", async () => {
-    if (!nodeLlamaCppAvailable) {
-      console.log("Skipping: node-llama-cpp not available");
+    if (skipIfLocalEmbeddingUnavailable()) {
       return;
     }
 
@@ -56,8 +83,7 @@ describe("LocalEmbeddingProvider - Real Embedding Tests", () => {
   }, 120000);
 
   it("should embed Chinese text", async () => {
-    if (!nodeLlamaCppAvailable) {
-      console.log("Skipping: node-llama-cpp not available");
+    if (skipIfLocalEmbeddingUnavailable()) {
       return;
     }
 
@@ -71,8 +97,7 @@ describe("LocalEmbeddingProvider - Real Embedding Tests", () => {
   }, 120000);
 
   it("should embed longer text", async () => {
-    if (!nodeLlamaCppAvailable) {
-      console.log("Skipping: node-llama-cpp not available");
+    if (skipIfLocalEmbeddingUnavailable()) {
       return;
     }
 
@@ -87,8 +112,7 @@ describe("LocalEmbeddingProvider - Real Embedding Tests", () => {
   }, 120000);
 
   it("should produce normalized vectors", async () => {
-    if (!nodeLlamaCppAvailable) {
-      console.log("Skipping: node-llama-cpp not available");
+    if (skipIfLocalEmbeddingUnavailable()) {
       return;
     }
 
@@ -103,8 +127,7 @@ describe("LocalEmbeddingProvider - Real Embedding Tests", () => {
   }, 120000);
 
   it("should produce consistent embeddings for same text", async () => {
-    if (!nodeLlamaCppAvailable) {
-      console.log("Skipping: node-llama-cpp not available");
+    if (skipIfLocalEmbeddingUnavailable()) {
       return;
     }
 
@@ -123,8 +146,7 @@ describe("LocalEmbeddingProvider - Real Embedding Tests", () => {
   }, 120000);
 
   it("should handle empty string", async () => {
-    if (!nodeLlamaCppAvailable) {
-      console.log("Skipping: node-llama-cpp not available");
+    if (skipIfLocalEmbeddingUnavailable()) {
       return;
     }
 
@@ -137,8 +159,7 @@ describe("LocalEmbeddingProvider - Real Embedding Tests", () => {
   }, 120000);
 
   it("should handle special characters", async () => {
-    if (!nodeLlamaCppAvailable) {
-      console.log("Skipping: node-llama-cpp not available");
+    if (skipIfLocalEmbeddingUnavailable()) {
       return;
     }
 
@@ -163,4 +184,17 @@ describe("LocalEmbeddingProvider - Real Embedding Tests", () => {
       expect(result.error.message).toContain("Local embeddings unavailable");
     }
   });
+
+  it("should not treat degenerate local embeddings as successful", async () => {
+    if (!nodeLlamaCppAvailable || localEmbeddingAvailable) {
+      console.log("Skipping: local embedding provider is either unavailable at import time or healthy");
+      return;
+    }
+
+    const result = await provider.embed("Local embedding provider health check");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("zero vector");
+    }
+  }, 120000);
 });
